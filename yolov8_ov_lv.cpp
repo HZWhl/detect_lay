@@ -70,7 +70,7 @@ EXTERN_C void NI_EXPORT load_class_list(char *path)
 }
 
 EXTERN_C void NI_EXPORT
-detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHandle errorHandle, double *time) {
+detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHandle errorHandle, double *time,int *exist) {
     //auto file_logger = spdlog::basic_logger_mt("basic_logger", "D:/basic.txt");
     //spdlog::set_default_logger(file_logger);
     NIERROR error = NI_ERR_SUCCESS;
@@ -82,17 +82,13 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
         NIImage source_src(sourceHandle_src);
         NIImage dest(destHandle);
 
+        *exist = 0;
         cv::Mat sourceMat_src;
         cv::Mat destMat;
         // ni图片转Mat
         ThrowNIError(source_src.ImageToMat(sourceMat_src));
 //        outfile << sourceMat_src.shape << endl;
-        if (source_src.type == NIImage_RGB32) {
-            cv::cvtColor(sourceMat_src, sourceMat_src, CV_RGB2BGR);
-            //outfile << "success" << endl;
-//            imwrite("D:/haha1.png", sourceMat_src);
-
-        }
+        cv::cvtColor(sourceMat_src, sourceMat_src, CV_RGB2BGR);
 //        cv::imwrite("D:/srcimg.png",sourceMat_src);
 //        outfile << source_src.type << endl;
         auto start = chrono::system_clock::now(); // 开始时间
@@ -100,14 +96,13 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
         Mat letterbox_img = letterbox(sourceMat_src);
         float scale = letterbox_img.size[0] / 640.0;
         Mat blob = blobFromImage(letterbox_img, 1.0 / 255.0, Size(640, 640), Scalar(), false);
-//        cv::imwrite("D:/aa.png",sourceMat_src);
+//        cv::imwrite("D:/aa.png",sourceMat_src);/
         // -------- Step 5. Feed the blob into the input node of the Model -------
         // Get input port for model with one input
         // Create tensor from external memory
         ov::InferRequest infer_request = compiled_model.create_infer_request();
         auto input_port = compiled_model.input();
         ov::Tensor input_tensor(input_port.get_element_type(), input_port.get_shape(), blob.ptr(0));
-
 
         // Set input tensor for model with one input
         infer_request.set_input_tensor(input_tensor);
@@ -134,12 +129,13 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
 
         // Figure out the bbox, class_id and class_score
         for (int i = 0; i < output_buffer.rows; i++) {
-            Mat classes_scores = output_buffer.row(i).colRange(4, 84);
+            Mat classes_scores = output_buffer.row(i).colRange(4, 5);
             Point class_id;
             double maxClassScore;
             minMaxLoc(classes_scores, 0, &maxClassScore, 0, &class_id);
 
             if (maxClassScore > score_threshold) {
+                *exist = 1;
                 class_scores.push_back(maxClassScore);
                 class_ids.push_back(class_id.x);
                 float cx = output_buffer.at<float>(i, 0);

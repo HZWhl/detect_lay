@@ -10,17 +10,18 @@
 
 std::vector<cv::Scalar> colors = { cv::Scalar(0, 0, 255) , cv::Scalar(0, 255, 0) , cv::Scalar(255, 0, 0) ,
                                    cv::Scalar(255, 100, 50) , cv::Scalar(50, 100, 255) , cv::Scalar(255, 50, 100) };
-const std::vector<std::string> class_names = {
-        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
-        "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
-        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-        "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
-        "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
-        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-        "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
-        "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
-        "hair drier", "toothbrush" };
+//const std::vector<std::string> class_names = {
+//        "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+//        "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+//        "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+//        "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+//        "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+//        "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+//        "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+//        "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+//        "hair drier", "toothbrush" };
 
+const std::vector<std::string> class_names = {"ds",};
 using namespace cv;
 using namespace dnn;
 
@@ -41,15 +42,18 @@ int main(int argc, char* argv[])
     ov::Core core;
 
     std::cout << "start" << std::endl;
+//    const std::string base_dir = "E:\\0.GSS\\Labview\\fan_wei\\bin\\";
     const std::string base_dir = "D:\\projects\\cppProjects\\detect_lay\\";
     // -------- Step 2. Compile the Model --------
-    auto compiled_model = core.compile_model(base_dir+"yolov8n_openvino_model/yolov8n.xml", "CPU");
+    auto compiled_model = core.compile_model(base_dir+"best_openvino_model\\best.xml", "CPU");
 
+    std::cout << "start2" << std::endl;
     // -------- Step 3. Create an Inference Request --------
     ov::InferRequest infer_request = compiled_model.create_infer_request();
 
+    std::cout << "start3" << std::endl;
     // -------- Step 4.Read a picture file and do the preprocess --------
-    Mat img = cv::imread(base_dir+"sample.jpg");
+    Mat img = cv::imread(base_dir+"Pic_2023_05_16_103736_blockId#14044.bmp");
     // Preprocess the image
     Mat letterbox_img = letterbox(img);
     float scale = letterbox_img.size[0] / 640.0;
@@ -63,6 +67,7 @@ int main(int argc, char* argv[])
     // Set input tensor for model with one input
     infer_request.set_input_tensor(input_tensor);
 
+    std::cout << "start5" << std::endl;
     // -------- Step 6. Start inference --------
     infer_request.infer();
 
@@ -70,11 +75,13 @@ int main(int argc, char* argv[])
     auto output = infer_request.get_output_tensor(0);
     auto output_shape = output.get_shape();
     std::cout << "The shape of output tensor:" << output_shape << std::endl;
-    int rows = output_shape[2];        //8400
-    int dimensions = output_shape[1];  //84: box[cx, cy, w, h]+80 classes scores
+//    int rows = output_shape[2];        //8400
+//    int dimensions = output_shape[1];  //84: box[cx, cy, w, h]+80 classes scores
 
+    std::cout << "start6" << std::endl;
     // -------- Step 8. Postprocess the result --------
     float* data = output.data<float>();
+    std::cout << output_shape[1]<<'\n' << output_shape[2]<<'\n'<<*data << std::endl;
     Mat output_buffer(output_shape[1], output_shape[2], CV_32F, data);
     transpose(output_buffer, output_buffer); //[8400,84]
     float score_threshold = 0.25;
@@ -85,7 +92,7 @@ int main(int argc, char* argv[])
 
     // Figure out the bbox, class_id and class_score
     for (int i = 0; i < output_buffer.rows; i++) {
-        Mat classes_scores = output_buffer.row(i).colRange(4, 84);
+        Mat classes_scores = output_buffer.row(i).colRange(4, 4+class_names.size());
         Point class_id;
         double maxClassScore;
         minMaxLoc(classes_scores, 0, &maxClassScore, 0, &class_id);
