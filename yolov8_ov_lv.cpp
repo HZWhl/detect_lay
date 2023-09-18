@@ -41,7 +41,12 @@ double getSeconds(chrono::time_point<chrono::system_clock> &start,
     return double(duration.count()) / 1000000;
 }
 
-ov::CompiledModel compiled_model;
+//ov::CompiledModel compiled_model;
+
+// 定义一个智能指针指向ov::CompiledModel对象
+std::shared_ptr<ov::CompiledModel> compiled_model;
+// 用ov::Core::compile_model()方法创建对象
+// 释放compiled_model
 
 EXTERN_C void NI_EXPORT load_net(char* path, int is_cuda)
 {
@@ -53,7 +58,8 @@ EXTERN_C void NI_EXPORT load_net(char* path, int is_cuda)
         device = "CPU";
     };
     ov::Core core;
-    compiled_model = core.compile_model(path, device);
+    compiled_model = std::make_shared<ov::CompiledModel>(core.compile_model(path, device));
+//    compiled_model = core.compile_model(path, device);
 // -------- Step 3. Create an Inference Request --------
 
 }
@@ -70,24 +76,24 @@ EXTERN_C void NI_EXPORT load_class_list(char *path)
 }
 
 EXTERN_C void NI_EXPORT
-detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHandle errorHandle, double *time,int *exist) {
-    //auto file_logger = spdlog::basic_logger_mt("basic_logger", "D:/basic.txt");
+detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHandle errorHandle,double *score_threshold, double *time,int32_t *exist) {
+//    auto file_logger = spdlog::basic_logger_mt("basic_logger", "D:/basic.txt");
     //spdlog::set_default_logger(file_logger);
     NIERROR error = NI_ERR_SUCCESS;
     ReturnOnPreviousError(errorHandle);
     try {
+//        ofstream outfile;
+//        outfile.open("D:/afile1000.txt");
         if (!sourceHandle_src || !destHandle || !errorHandle) {
             ThrowNIError(NI_ERR_NULL_POINTER);
         }
         NIImage source_src(sourceHandle_src);
         NIImage dest(destHandle);
 
-        *exist = 0;
         cv::Mat sourceMat_src;
         cv::Mat destMat;
         // ni图片转Mat
         ThrowNIError(source_src.ImageToMat(sourceMat_src));
-//        outfile << sourceMat_src.shape << endl;
         cv::cvtColor(sourceMat_src, sourceMat_src, CV_RGB2BGR);
 //        cv::imwrite("D:/srcimg.png",sourceMat_src);
 //        outfile << source_src.type << endl;
@@ -100,8 +106,8 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
         // -------- Step 5. Feed the blob into the input node of the Model -------
         // Get input port for model with one input
         // Create tensor from external memory
-        ov::InferRequest infer_request = compiled_model.create_infer_request();
-        auto input_port = compiled_model.input();
+        ov::InferRequest infer_request = compiled_model->create_infer_request();
+        auto input_port = compiled_model->input();
         ov::Tensor input_tensor(input_port.get_element_type(), input_port.get_shape(), blob.ptr(0));
 
         // Set input tensor for model with one input
@@ -121,7 +127,7 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
         float* data = output.data<float>();
         Mat output_buffer(output_shape[1], output_shape[2], CV_32F, data);
         transpose(output_buffer, output_buffer); //[8400,84]
-        float score_threshold = 0.25;
+//        float score_threshold = 0.25;
         float nms_threshold = 0.5;
         std::vector<int> class_ids;
         std::vector<float> class_scores;
@@ -133,9 +139,7 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
             Point class_id;
             double maxClassScore;
             minMaxLoc(classes_scores, 0, &maxClassScore, 0, &class_id);
-
             if (maxClassScore > score_threshold) {
-                *exist = 1;
                 class_scores.push_back(maxClassScore);
                 class_ids.push_back(class_id.x);
                 float cx = output_buffer.at<float>(i, 0);
@@ -150,7 +154,7 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
 
                 boxes.push_back(Rect(left, top, width, height));
             }
-        }
+        };
         //NMS
         std::vector<int> indices;
         NMSBoxes(boxes, class_scores, score_threshold, nms_threshold, indices);
@@ -164,8 +168,12 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
             Size textSize = cv::getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, 0);
             Rect textBox(boxes[index].tl().x, boxes[index].tl().y - 15, textSize.width, textSize.height+5);
             cv::rectangle(sourceMat_src, textBox, colors[class_id % 6], FILLED);
+            exist[class_id] = exist[class_id]+1;
             putText(sourceMat_src, label, Point(boxes[index].tl().x, boxes[index].tl().y - 5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
         }
+//        outfile << *result_list.data() << endl;
+//        int32_t arr[class_names.size()];
+//        exist = result_list.data();
         auto end = chrono::system_clock::now(); // 结束时间
         *time = getSeconds(start, end);
         cv::cvtColor(sourceMat_src, destMat, CV_BGR2RGBA);
@@ -187,5 +195,5 @@ detect_all(NIImageHandle sourceHandle_src, NIImageHandle destHandle, NIErrorHand
 
 EXTERN_C void NI_EXPORT release_model()
 {
-    exit(0);
+    compiled_model = nullptr;
 }

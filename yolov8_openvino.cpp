@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
 //    const std::string base_dir = "E:\\0.GSS\\Labview\\fan_wei\\bin\\";
     const std::string base_dir = "D:\\projects\\cppProjects\\detect_lay\\";
     // -------- Step 2. Compile the Model --------
-    auto compiled_model = core.compile_model(base_dir+"best_openvino_model\\best.xml", "CPU");
+    auto compiled_model = core.compile_model(base_dir+"best_all_openvino_model\\best_all.xml", "CPU");
 
     std::cout << "start2" << std::endl;
     // -------- Step 3. Create an Inference Request --------
@@ -89,14 +89,13 @@ int main(int argc, char* argv[])
     std::vector<int> class_ids;
     std::vector<float> class_scores;
     std::vector<Rect> boxes;
-
+    std::vector<int> result_list(class_names.size(),0);
     // Figure out the bbox, class_id and class_score
     for (int i = 0; i < output_buffer.rows; i++) {
         Mat classes_scores = output_buffer.row(i).colRange(4, 4+class_names.size());
         Point class_id;
         double maxClassScore;
         minMaxLoc(classes_scores, 0, &maxClassScore, 0, &class_id);
-
         if (maxClassScore > score_threshold) {
             class_scores.push_back(maxClassScore);
             class_ids.push_back(class_id.x);
@@ -109,10 +108,9 @@ int main(int argc, char* argv[])
             int top = int((cy - 0.5 * h) * scale);
             int width = int(w * scale);
             int height = int(h * scale);
-
             boxes.push_back(Rect(left, top, width, height));
         }
-    }
+    };
     //NMS
     std::vector<int> indices;
     NMSBoxes(boxes, class_scores, score_threshold, nms_threshold, indices);
@@ -126,8 +124,18 @@ int main(int argc, char* argv[])
         Size textSize = cv::getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, 0);
         Rect textBox(boxes[index].tl().x, boxes[index].tl().y - 15, textSize.width, textSize.height+5);
         cv::rectangle(img, textBox, colors[class_id % 6], FILLED);
+
+        result_list[class_id] = result_list[class_id]++;
         putText(img, label, Point(boxes[index].tl().x, boxes[index].tl().y - 5), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
     }
+//    std::cout <<"结果数组数量: " <<*class_ids.data()<< "   "<<class_ids.size() <<std::endl;
+    std::cout <<"结果数组数量: " <<*result_list.data()<< "   "<<result_list.size() <<std::endl;
+    std::cout << "v = ";
+    for (int i = 0; i < result_list.size(); i++) // 使用for循环遍历vector中的每个元素
+    {
+        std::cout << result_list[i] << " "; // 使用下标运算符[]访问并输出vector中的元素
+    }
+    std::cout << std::endl;
 
     namedWindow("YOLOv8 OpenVINO Inference C++ Demo", WINDOW_AUTOSIZE);
     imshow("YOLOv8 OpenVINO Inference C++ Demo", img);
